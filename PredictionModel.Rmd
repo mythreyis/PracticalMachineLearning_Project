@@ -1,0 +1,133 @@
+---
+title: "Practical Machine Learning - Course Project"
+output: html_document
+---
+##Executive Summary
+
+The Human Activity Recognition training data used in this project includes measurements from accelerometers on the belt, forearm, arm, and dumbell of 6 participants and a quantifier called 'classe' to determine the manner in which an exercise is performed. The goal of this project is to build a model, perform cross validations and to make predictions on the 'classe' variable in the testing dataset based on the other predictors in the dataset. More information on the data is available [here](http://groupware.les.inf.puc-rio.br/har). 
+
+The classe variable has the following categories to determine how an exercise is performed.
+
+- Class A: exactly according to the specification
+- Class B: throwing the elbows to the front
+- Class C: lifting the dumbbell only halfway
+- Class D: lowering the dumbbell only halfway
+- Class E: throwing the hips to the front
+
+Random forest algorithm was used to build a prediction model and it yielded more than 99% accuracy. Using the model to predict the 'classe' variable on the test data also yielded accurate results.
+
+##Initial setup
+
+The required libraries are loaded and a seed is set so the results are reproducible.
+
+```{r}
+library(knitr)
+library(caret)
+library(randomForest)
+library(gridExtra)
+opts_chunk$set(cache=TRUE)
+set.seed(12345)
+```
+
+##Loading data
+
+The training and test datasets are both downloaded and read into data frames as shown below.
+
+```{r}
+if(!file.exists("pml-training.csv"))
+{
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+                destfile = "pml-training.csv", method="curl")
+}
+
+if(!file.exists("pml-testing.csv"))
+{
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+                destfile = "pml-testing.csv", method="curl")
+}
+training <- read.csv("pml-training.csv", na.strings = c("NA", "", "#DIV/0!"), header=TRUE)
+testing <- read.csv("pml-testing.csv", na.strings = c("NA", "", "#DIV/0!"), header=TRUE)
+
+dim(training)
+dim(testing)
+```
+
+## Cleaning data
+
+A summary of the training dataset shows that the first seven columns seem to be for just book-keeping and are not relevant to making predictions. Hence, they can be safely removed from the data frames.
+
+```{r}
+training <- training[, -c(1:7)]
+testing <- testing[, -c(1:7)]
+```
+
+Also, several columns have NA values. The following table shows the number of NA values in all the columns. As many columns have mostly NA values, they would not add much value to the prediction model and hence can be removed as well.
+
+```{r}
+na_count <- sapply(training, function(x) sum(is.na(x)))
+na_count <- as.data.frame(na_count)
+na_count <- na_count[order(-na_count$na_count), , drop=FALSE]
+kable(na_count, format="html")
+
+colsToBeRemoved <- lapply(training, function(x){(sum(is.na(x)) > 0)})
+training <- training[, colsToBeRemoved==FALSE]
+```
+
+At first, the dataset is partitioned into two subsets, one with 70% of the data to build the model and the other with the rest 30% for cross validation.
+
+```{r}
+trainSplit <- createDataPartition(training$classe, p = 0.7, list=FALSE)
+trainingData <- training[trainSplit, ]
+trainingDataForCrossValidation <- training[-trainSplit, ]
+```
+
+## Random forest algorithm
+
+Random forest algorithm is chosen to build the prediction model over Decision Tree and other algorithms as it yields more accurate predictions.
+
+```{r}
+modFit <- randomForest(classe ~ ., data=trainingData)
+modFit
+```
+
+The random forest algorithm built 500 decision trees and used majority of votes to make predictions. The Out-of-bag estimate of error rate is very small at 0.5% and the accuracy is 99.5% as can be seen in the confusion matrix with reference 'classe' variable as columns and predicted 'classe' variable as rows.
+
+## Cross-validation
+
+The model is used to perform cross-validation on a subset of training data using the 'predict' function. 
+
+```{r}
+predictTraining <- predict(modFit, trainingDataForCrossValidation)
+confusionMatrix(predictTraining, trainingDataForCrossValidation$classe)
+```
+
+## Variance Importance
+
+The varImp method calculates the variable importance of the variables used to make predictions on the classe variable. The top 6 variables of importance are shown below.
+
+```{r}
+variableImportance <- varImp(modFit)
+variableImportance <- variableImportance[order(-variableImportance$Overall), , drop=FALSE]
+kable(head(variableImportance), format="html")
+```
+
+## Plotting on predictors
+
+Let us create a couple of plots using the variables of utmost importance in the prediction model just to make sure there are no imbalances or outliers in the predictors.
+```{r}
+plot1 <- qplot(roll_belt, colour=classe, data=trainingData, geom='density')
+plot2 <- qplot(yaw_belt, colour=classe, data=trainingData, geom='density')
+plot3 <- qplot(pitch_forearm, colour=classe, data=trainingData, geom='density')
+plot4 <- qplot(magnet_dumbbell_z, colour=classe, data=trainingData, geom='density')
+grid.arrange(plot1, plot2, plot3, plot4)
+```
+
+## Predictions on 'testing' data
+The predictions on the testing dataset can be seen below.
+
+```{r}
+predict(modFit, testing)
+```
+## Conclusion
+
+The random forest algorithm can be considered the right choice for our prediction model as the accuracy is still high at 99.44% and an out-of sample error at .56% in cross-validation training dataset and 100% accurate results in the training dataset. 
