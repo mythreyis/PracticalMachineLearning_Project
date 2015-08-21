@@ -20,7 +20,7 @@ Random forest algorithm was used to build a prediction model and it yielded more
 
 The required libraries are loaded and a seed is set so the results are reproducible.
 
-```{r}
+```{r echo=TRUE, message=FALSE, warning=FALSE, include=TRUE}
 library(knitr)
 library(caret)
 library(randomForest)
